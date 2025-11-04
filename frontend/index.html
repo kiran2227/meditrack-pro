@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediTrack Pro - Smart Medicine Management</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Landing Page -->
+    <div class="page active" id="landingPage">
+        <div class="landing-container">
+            <nav class="navbar">
+                <a href="#" class="logo">
+                    <i class="fas fa-pills"></i>
+                    MediTrack Pro
+                </a>
+                <div class="nav-buttons">
+                    <button class="btn btn-secondary" id="landingLoginBtn">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                    <button class="btn btn-primary" id="landingRegisterBtn">
+                        <i class="fas fa-user-plus"></i> Get Started
+                    </button>
+                </div>
+            </nav>
+            
+            <section class="hero">
+                <h1>Smart Medicine Management</h1>
+                <p>Never miss a dose with intelligent reminders, custom voice alerts, and comprehensive tracking for your medication schedule.</p>
+                <button class="btn btn-primary" id="heroGetStartedBtn">
+                    <i class="fas fa-rocket"></i> Start Your Health Journey
+                </button>
+            </section>
+            
+            <section class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-microphone-alt"></i>
+                    </div>
+                    <h3>Custom Voice Alerts</h3>
+                    <p>Record your own voice reminders or upload audio files for personalized medication alerts.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-bell"></i>
+                    </div>
+                    <h3>Smart Scheduling</h3>
+                    <p>Intelligent reminders with rescheduling options and continuous alerts until confirmation.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-history"></i>
+                    </div>
+                    <h3>Complete History</h3>
+                    <p>Track all your medication intake with detailed logs and export capabilities.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <h3>Guardian Support</h3>
+                    <p>Keep your loved ones informed with guardian contact features and emergency alerts.</p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Login/Register Page -->
+    <div class="page" id="authPage">
+        <div class="auth-container">
+            <div class="auth-card">
+                <div class="auth-header">
+                    <div class="logo">
+                        <i class="fas fa-pills"></i>
+                        MediTrack Pro
+                    </div>
+                    <p>Your health companion</p>
+                </div>
+                
+                <div class="auth-tabs">
+                    <div class="auth-tab active" id="loginTab">Login</div>
+                    <div class="auth-tab" id="registerTab">Register</div>
+                </div>
+                
+                <div class="auth-body">
+                    <!-- Login Form -->
+                    <div id="loginForm">
+                        <div class="form-group">
+                            <label class="form-label" for="loginEmail">Email Address</label>
+                            <input type="email" id="loginEmail" class="form-control" placeholder="Enter your email">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="loginPassword">Password</label>
+                            <input type="password" id="loginPassword" class="form-control" placeholder="Enter your password">
+                        </div>
+                        
+                        <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" id="loginBtn">
+                            <i class="fas fa-sign-in-alt"></i> Sign In
+                        </button>
+                    </div>
+                    
+                    <!-- Register Form -->
+                    <div id="registerForm" style="display: none;">
+                        <div class="form-group">
+                            <label class="form-label" for="registerName">Full Name *</label>
+                            <input type="text" id="registerName" class="form-control" placeholder="Enter your full name" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="registerEmail">Email Address *</label>
+                            <input type="email" id="registerEmail" class="form-control" placeholder="Enter your email" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="registerPassword">Password *</label>
+                            <input type="password" id="registerPassword" class="form-control" placeholder="Create a password (min. 6 characters)" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="registerAge">Age</label>
+                            <input type="number" id="registerAge" class="form-control" placeholder="Your age" min="1" max="120">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="registerMedicalHistory">Medical History</label>
+                            <textarea id="registerMedicalHistory" class="form-control" placeholder="Any existing medical conditions, allergies, or important health information..." rows="3"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="registerGuardianName">Guardian Name</label>
+                            <input type="text" id="registerGuardianName" class="form-control" placeholder="Emergency contact person">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="registerGuardianContact">Guardian Contact</label>
+                            <input type="text" id="registerGuardianContact" class="form-control" placeholder="Phone number or email">
+                        </div>
+                        
+                        <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" id="registerBtn">
+                            <i class="fas fa-user-plus"></i> Create Account
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="page" id="dashboard">
+        <div class="dashboard-container">
+            <header class="dashboard-header">
+                <h1 class="dashboard-title">Medicine Dashboard</h1>
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <span id="userName">User</span>
+                    <button class="btn btn-secondary btn-sm" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </header>
+            
+            <div class="dashboard-content">
+                <!-- Sidebar -->
+                <div class="sidebar">
+                    <div class="menu-items">
+                        <div class="menu-item active" data-target="dashboard-section">
+                            <i class="fas fa-tachometer-alt"></i>
+                            <span>Dashboard</span>
+                        </div>
+                        <div class="menu-item" data-target="add-medicine-section">
+                            <i class="fas fa-pills"></i>
+                            <span>Add Medicine</span>
+                        </div>
+                        <div class="menu-item" data-target="voice-alerts-section">
+                            <i class="fas fa-microphone-alt"></i>
+                            <span>Voice Alerts</span>
+                        </div>
+                        <div class="menu-item" data-target="history-section">
+                            <i class="fas fa-history"></i>
+                            <span>History & Logs</span>
+                        </div>
+                        <div class="menu-item" data-target="profile-section">
+                            <i class="fas fa-user"></i>
+                            <span>My Profile</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Main Content -->
+                <div class="main-content">
+                    <!-- Dashboard Section -->
+                    <div class="content-section active" id="dashboard-section">
+                        <h2 class="section-title">Today's Overview</h2>
+                        
+                        <!-- Summary Cards -->
+                        <div class="summary-grid">
+                            <div class="summary-card">
+                                <div class="summary-icon taken">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div class="summary-value" id="takenCount">0</div>
+                                <div class="summary-label">Medicines Taken</div>
+                            </div>
+                            
+                            <div class="summary-card">
+                                <div class="summary-icon pending">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                                <div class="summary-value" id="pendingCount">0</div>
+                                <div class="summary-label">Pending Medicines</div>
+                            </div>
+                            
+                            <div class="summary-card">
+                                <div class="summary-icon missed">
+                                    <i class="fas fa-times-circle"></i>
+                                </div>
+                                <div class="summary-value" id="missedCount">0</div>
+                                <div class="summary-label">Missed Medicines</div>
+                            </div>
+                            
+                            <div class="summary-card">
+                                <div class="summary-icon stock">
+                                    <i class="fas fa-box"></i>
+                                </div>
+                                <div class="summary-value" id="lowStockCount">0</div>
+                                <div class="summary-label">Low Stock Alert</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Due Medicines Alert -->
+                        <div class="alert-card due-medicines-alert" id="dueMedicinesAlert" style="display: none;">
+                            <div class="alert-header">
+                                <i class="fas fa-bell"></i>
+                                <h3>Medication Due</h3>
+                            </div>
+                            <div class="alert-body" id="dueMedicinesList">
+                                <!-- Due medicines will be populated here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Medicine List -->
+                        <div class="table-container">
+                            <div class="table-header">
+                                <h3 class="table-title">Today's Schedule</h3>
+                                <button class="btn btn-primary btn-sm" onclick="switchContentSection('add-medicine-section')">
+                                    <i class="fas fa-plus"></i> Add Medicine
+                                </button>
+                            </div>
+                            <table class="medicine-table">
+                                <thead>
+                                    <tr>
+                                        <th>Medicine</th>
+                                        <th>Dosage</th>
+                                        <th>Time</th>
+                                        <th>Voice Alert</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="medicineTableBody">
+                                    <!-- Medicine rows will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Add Medicine Section -->
+                    <div class="content-section" id="add-medicine-section">
+                        <h2 class="section-title">Add New Medicine</h2>
+                        <div class="card">
+                            <div class="card-body">
+                                <form id="addMedicineForm">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="medicineName">Medicine Name *</label>
+                                            <input type="text" id="medicineName" class="form-control" placeholder="e.g., Aspirin, Vitamin C" required>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label class="form-label" for="medicineDosage">Dosage *</label>
+                                            <input type="text" id="medicineDosage" class="form-control" placeholder="e.g., 1 tablet, 5ml" required>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="medicineFrequency">Frequency</label>
+                                            <select id="medicineFrequency" class="form-control">
+                                                <option value="once">Once a day</option>
+                                                <option value="twice">Twice a day</option>
+                                                <option value="thrice">Three times a day</option>
+                                                <option value="custom">Custom schedule</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label class="form-label" for="medicineTime">Time *</label>
+                                            <input type="time" id="medicineTime" class="form-control" required>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="medicineStock">Current Stock</label>
+                                            <input type="number" id="medicineStock" class="form-control" placeholder="Number of doses available" min="0">
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label class="form-label" for="medicineRefill">Refill Reminder</label>
+                                            <input type="number" id="medicineRefill" class="form-control" placeholder="Alert when stock reaches" min="0">
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">Voice Alert (Optional)</label>
+                                        <div class="voice-alert-options">
+                                            <select id="voiceAlertSelect" class="form-control">
+                                                <option value="">Select a voice alert</option>
+                                                <option value="default">Default System Voice</option>
+                                            </select>
+                                            <small class="form-text">You can upload custom voice alerts in the Voice Alerts section</small>
+                                        </div>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-primary" id="saveMedicineBtn">
+                                        <i class="fas fa-save"></i> Save Medicine
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Voice Alerts Section -->
+                    <div class="content-section" id="voice-alerts-section">
+                        <h2 class="section-title">Voice Alerts Management</h2>
+                        
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Upload Custom Voice Alert</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="upload-area" id="uploadArea">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <h4>Drop your audio file here or click to browse</h4>
+                                    <p>Supported formats: MP3, WAV, OGG (Max: 10MB)</p>
+                                    <input type="file" id="voiceFileInput" accept="audio/*" style="display: none;">
+                                    <button class="btn btn-primary" onclick="document.getElementById('voiceFileInput').click()">
+                                        <i class="fas fa-upload"></i> Select File
+                                    </button>
+                                </div>
+                                <div id="uploadProgress" style="display: none;">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="progressFill"></div>
+                                    </div>
+                                    <p id="uploadStatus">Uploading...</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card" style="margin-top: 24px;">
+                            <div class="card-header">
+                                <h3>Your Voice Alerts</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="voiceAlertsList" class="voice-alerts-grid">
+                                    <!-- Voice alerts will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card" style="margin-top: 24px;">
+                            <div class="card-header">
+                                <h3>Record New Voice Alert</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="recording-controls">
+                                    <button class="btn btn-primary" id="startRecordingBtn">
+                                        <i class="fas fa-record-vinyl"></i> Start Recording
+                                    </button>
+                                    <button class="btn btn-secondary" id="stopRecordingBtn" disabled>
+                                        <i class="fas fa-stop"></i> Stop Recording
+                                    </button>
+                                    <button class="btn btn-success" id="playRecordingBtn" disabled>
+                                        <i class="fas fa-play"></i> Play
+                                    </button>
+                                    <button class="btn btn-info" id="saveRecordingBtn" disabled>
+                                        <i class="fas fa-save"></i> Save Recording
+                                    </button>
+                                </div>
+                                <div class="recording-visualizer" id="recordingVisualizer">
+                                    <i class="fas fa-microphone"></i> Click record to start recording your voice
+                                </div>
+                                <div class="recorded-audio" id="recordedAudio" style="display: none;">
+                                    <audio id="audioPlayer" controls style="width: 100%; margin-top: 8px;"></audio>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- History & Logs Section -->
+                    <div class="content-section" id="history-section">
+                        <h2 class="section-title">Medication History & Logs</h2>
+                        
+                        <div class="history-filters">
+                            <div class="form-group">
+                                <label class="form-label">Date Range</label>
+                                <select id="historyRange" class="form-control">
+                                    <option value="7">Last 7 Days</option>
+                                    <option value="30" selected>Last 30 Days</option>
+                                    <option value="90">Last 90 Days</option>
+                                    <option value="365">Last Year</option>
+                                    <option value="all">All Time</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Status</label>
+                                <select id="historyStatus" class="form-control">
+                                    <option value="all">All Status</option>
+                                    <option value="taken">Taken</option>
+                                    <option value="missed">Missed</option>
+                                    <option value="rescheduled">Rescheduled</option>
+                                </select>
+                            </div>
+                            
+                            <button class="btn btn-primary" style="align-self: flex-end;" id="applyHistoryFilter">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                        </div>
+                        
+                        <div class="table-container history-table-container">
+                            <div class="table-header">
+                                <h3 class="table-title">Medication History</h3>
+                                <button class="btn btn-secondary btn-sm" id="exportHistoryBtn">
+                                    <i class="fas fa-download"></i> Export Logs
+                                </button>
+                            </div>
+                            <table class="medicine-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Medicine</th>
+                                        <th>Dosage</th>
+                                        <th>Scheduled Time</th>
+                                        <th>Actual Time</th>
+                                        <th>Status</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyTableBody">
+                                    <!-- History rows will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Profile Section -->
+                    <div class="content-section" id="profile-section">
+                        <h2 class="section-title">My Profile</h2>
+                        
+                        <div class="card">
+                            <div class="card-body">
+                                <form id="profileForm">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="profileName">Full Name *</label>
+                                            <input type="text" id="profileName" class="form-control" required>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label class="form-label" for="profileEmail">Email Address *</label>
+                                            <input type="email" id="profileEmail" class="form-control" readonly>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="profileAge">Age</label>
+                                            <input type="number" id="profileAge" class="form-control" min="1" max="120">
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label" for="profileMedicalHistory">Medical History</label>
+                                        <textarea id="profileMedicalHistory" class="form-control" placeholder="Any existing medical conditions, allergies, or important health information..." rows="4"></textarea>
+                                    </div>
+
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="profileGuardianName">Guardian Name</label>
+                                            <input type="text" id="profileGuardianName" class="form-control" placeholder="Emergency contact person">
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label class="form-label" for="profileGuardianContact">Guardian Contact</label>
+                                            <input type="text" id="profileGuardianContact" class="form-control" placeholder="Phone number or email">
+                                        </div>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-primary" id="saveProfileBtn">
+                                        <i class="fas fa-save"></i> Update Profile
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Medicine Reminder Modal -->
+    <div class="modal" id="reminderModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-bell"></i> Medication Reminder</h3>
+            </div>
+            <div class="modal-body">
+                <div id="reminderContent">
+                    <!-- Reminder content will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success" id="markTakenBtn">
+                    <i class="fas fa-check"></i> Taken
+                </button>
+                <button class="btn btn-warning" id="remindLaterBtn">
+                    <i class="fas fa-clock"></i> Remind Later
+                </button>
+                <button class="btn btn-secondary" id="snoozeBtn">
+                    <i class="fas fa-bed"></i> Snooze (5 min)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/auth.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/voice.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
