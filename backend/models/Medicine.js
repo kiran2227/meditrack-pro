@@ -1,6 +1,7 @@
 const { pool } = require('../config/database');
 
 class Medicine {
+  
   static async create(medicineData) {
     const { user_id, name, dosage, time, frequency, stock, refill_reminder, voice_alert_path } = medicineData;
     const [result] = await pool.execute(
@@ -8,6 +9,32 @@ class Medicine {
       [user_id, name, dosage, time, frequency, stock, refill_reminder, voice_alert_path]
     );
     return result.insertId;
+  }
+  // models/Medicine.js
+
+  static async findByBaseName(userId, baseName) {
+    // Implementation to find all medicines with the same base name
+    const [medicines] = await db.execute(
+      'SELECT * FROM medicines WHERE user_id = ? AND (name = ? OR name LIKE ?)',
+      [userId, baseName, `${baseName} (Time %)`]
+    );
+    return medicines;
+  }
+
+  static async updateStock(medicineId, newStock) {
+    const [result] = await db.execute(
+      'UPDATE medicines SET stock = ? WHERE id = ?',
+      [newStock, medicineId]
+    );
+    return result;
+  }
+
+  static async updateStatus(medicineId, status) {
+    const [result] = await db.execute(
+      'UPDATE medicines SET status = ?, taken_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [status, medicineId]
+    );
+    return result;
   }
 
   static async findByUserId(userId) {

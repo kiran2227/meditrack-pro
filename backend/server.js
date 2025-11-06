@@ -6,7 +6,7 @@ const multer = require('multer');
 const mysql = require('mysql2/promise');
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5000;
 
 // MySQL Database Configuration
 const dbConfig = {
@@ -154,7 +154,7 @@ const storage = multer.diskStorage({
 const upload = multer({
     storage: storage,
     limits: {
-        fileSize: 10 * 1024 * 1024
+        fileSize: 10 * 1024 * 1024 // 10MB
     },
     fileFilter: (req, file, cb) => {
         if (file.fieldname === 'voiceFile') {
@@ -175,7 +175,7 @@ const upload = multer({
     }
 });
 
-// In-memory storage for active reminders (you can move this to database too)
+// In-memory storage for active reminders
 let activeReminders = new Map();
 let reminderIntervals = new Map();
 
@@ -196,7 +196,7 @@ uploadsDirs.forEach(dir => {
 
 console.log('✅ Upload directories created');
 
-// Function to check and trigger reminders
+// Enhanced reminder checking (SERVER-SIDE ONLY - No browser APIs)
 async function checkReminders() {
     try {
         const [medicines] = await db.execute(`
@@ -204,14 +204,18 @@ async function checkReminders() {
         `);
 
         const now = new Date();
-        const currentTime = now.toTimeString().slice(0, 5);
+        const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
 
         for (const medicine of medicines) {
             if (medicine.time === currentTime) {
                 if (!activeReminders.has(medicine.id)) {
                     console.log(`🔔 Reminder triggered for: ${medicine.name} at ${currentTime}`);
                     activeReminders.set(medicine.id, medicine);
-                    startReminderLoop(medicine);
+                    
+                    // Log low stock alert if applicable
+                    if (medicine.stock <= medicine.refill_reminder && medicine.refill_reminder > 0) {
+                        console.log(`⚠️ LOW STOCK: ${medicine.name} has ${medicine.stock} doses left`);
+                    }
                 }
             }
         }
@@ -220,25 +224,8 @@ async function checkReminders() {
     }
 }
 
-function startReminderLoop(medicine) {
-    if (reminderIntervals.has(medicine.id)) {
-        clearInterval(reminderIntervals.get(medicine.id));
-    }
-    
-    const interval = setInterval(() => {
-        if (activeReminders.has(medicine.id)) {
-            console.log(`🔊 Playing reminder for: ${medicine.name}`);
-        } else {
-            clearInterval(interval);
-            reminderIntervals.delete(medicine.id);
-        }
-    }, 30000);
-    
-    reminderIntervals.set(medicine.id, interval);
-}
-
-// Check reminders every 10 seconds
-setInterval(checkReminders, 10000);
+// Check reminders every 30 seconds
+setInterval(checkReminders, 30000);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -309,6 +296,13 @@ app.post('/api/auth/register', async (req, res) => {
             });
         }
 
+        if (password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password must be at least 6 characters long'
+            });
+        }
+
         // Check if user exists
         const [existingUsers] = await db.execute(
             'SELECT * FROM users WHERE email = ?',
@@ -322,11 +316,12 @@ app.post('/api/auth/register', async (req, res) => {
             });
         }
 
+        const userId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
         const user = {
-            id: Date.now().toString(),
+            id: userId,
             name,
             email,
-            password,
+            password, // In production, hash this password!
             age: age || null,
             medical_history: medical_history || null,
             guardian_name: guardian_name || null,
@@ -390,6 +385,7 @@ app.post('/api/auth/login', async (req, res) => {
 
         const user = users[0];
 
+        // In production, use bcrypt to compare hashed passwords
         if (user.password !== password) {
             return res.status(401).json({
                 success: false,
@@ -441,8 +437,9 @@ app.post('/api/voice/upload', upload.single('voiceFile'), async (req, res) => {
 
         const { alertName } = req.body;
 
+        const voiceAlertId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
         const voiceAlert = {
-            id: Date.now().toString(),
+            id: voiceAlertId,
             user_id: userId,
             name: alertName || `Voice Alert ${new Date().toLocaleDateString()}`,
             file_name: req.file.filename,
@@ -536,7 +533,7 @@ app.post('/api/medicines', upload.fields([
     { name: 'voiceFile', maxCount: 1 }
 ]), async (req, res) => {
     try {
-        const { name, dosage, time, frequency, stock, refill_reminder, voice_alert_type, alertName } = req.body;
+        const { name, dosage, frequency, medicineTime1, medicineTime2, medicineTime3, stock, refill_reminder, voice_alert_type, alertName } = req.body;
         const userId = req.headers['user-id'];
 
         if (!userId) {
@@ -546,67 +543,85 @@ app.post('/api/medicines', upload.fields([
             });
         }
 
-        if (!name || !dosage || !time) {
+        if (!name || !dosage || !medicineTime1) {
             return res.status(400).json({
                 success: false,
-                message: 'Name, dosage and time are required'
+                message: 'Name, dosage and at least one time are required'
             });
         }
 
-        let medicinePhoto = null;
-        let voiceAlertId = null;
-
-        // Handle medicine photo
-        if (req.files && req.files['medicinePhoto']) {
-            medicinePhoto = req.files['medicinePhoto'][0].filename;
+        // Handle multiple times based on frequency
+        let times = [medicineTime1];
+        if (frequency === 'twice' && medicineTime2) {
+            times.push(medicineTime2);
+        } else if (frequency === 'thrice' && medicineTime2 && medicineTime3) {
+            times.push(medicineTime2, medicineTime3);
         }
 
-        // Handle voice alert
-        if (req.files && req.files['voiceFile']) {
-            const voiceFile = req.files['voiceFile'][0];
-            const voiceAlert = {
-                id: Date.now().toString(),
+        // Create separate medicine entries for each time
+        const medicineIds = [];
+        for (let i = 0; i < times.length; i++) {
+            const time = times[i];
+            
+            let medicinePhoto = null;
+            let voiceAlertId = null;
+
+            // Handle medicine photo (only for first entry)
+            if (i === 0 && req.files && req.files['medicinePhoto']) {
+                medicinePhoto = req.files['medicinePhoto'][0].filename;
+            }
+
+            // Handle voice alert (only for first entry)
+            if (i === 0 && req.files && req.files['voiceFile']) {
+                const voiceFile = req.files['voiceFile'][0];
+                const voiceAlertId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+                const voiceAlert = {
+                    id: voiceAlertId,
+                    user_id: userId,
+                    name: alertName || `Voice for ${name}`,
+                    file_name: voiceFile.filename,
+                    file_path: voiceFile.path
+                };
+
+                await db.execute(
+                    'INSERT INTO voice_alerts (id, user_id, name, file_name, file_path) VALUES (?, ?, ?, ?, ?)',
+                    [voiceAlert.id, voiceAlert.user_id, voiceAlert.name, voiceAlert.file_name, voiceAlert.file_path]
+                );
+                voiceAlertId = voiceAlert.id;
+            }
+
+            const medicineId = Date.now().toString() + i + Math.random().toString(36).substr(2, 5);
+            const medicine = {
+                id: medicineId,
                 user_id: userId,
-                name: alertName || `Voice for ${name}`,
-                file_name: voiceFile.filename,
-                file_path: voiceFile.path
+                name: i === 0 ? name : `${name} (Time ${i + 1})`,
+                dosage: dosage,
+                time: time,
+                frequency: frequency,
+                stock: stock || 0,
+                refill_reminder: refill_reminder || 0,
+                voice_alert_type: voice_alert_type || 'default',
+                voice_alert_id: voiceAlertId,
+                medicine_photo: medicinePhoto,
+                status: 'pending'
             };
 
             await db.execute(
-                'INSERT INTO voice_alerts (id, user_id, name, file_name, file_path) VALUES (?, ?, ?, ?, ?)',
-                [voiceAlert.id, voiceAlert.user_id, voiceAlert.name, voiceAlert.file_name, voiceAlert.file_path]
+                `INSERT INTO medicines (id, user_id, name, dosage, time, frequency, stock, refill_reminder, 
+                 voice_alert_type, voice_alert_id, medicine_photo, status) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [medicine.id, medicine.user_id, medicine.name, medicine.dosage, medicine.time, 
+                 medicine.frequency, medicine.stock, medicine.refill_reminder, medicine.voice_alert_type,
+                 medicine.voice_alert_id, medicine.medicine_photo, medicine.status]
             );
-            voiceAlertId = voiceAlert.id;
+
+            medicineIds.push(medicine.id);
         }
-
-        const medicine = {
-            id: Date.now().toString(),
-            user_id: userId,
-            name,
-            dosage,
-            time,
-            frequency: frequency || 'once',
-            stock: stock || 0,
-            refill_reminder: refill_reminder || 0,
-            voice_alert_type: voice_alert_type || 'default',
-            voice_alert_id: voiceAlertId,
-            medicine_photo: medicinePhoto,
-            status: 'pending'
-        };
-
-        await db.execute(
-            `INSERT INTO medicines (id, user_id, name, dosage, time, frequency, stock, refill_reminder, 
-             voice_alert_type, voice_alert_id, medicine_photo, status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [medicine.id, medicine.user_id, medicine.name, medicine.dosage, medicine.time, 
-             medicine.frequency, medicine.stock, medicine.refill_reminder, medicine.voice_alert_type,
-             medicine.voice_alert_id, medicine.medicine_photo, medicine.status]
-        );
 
         res.status(201).json({
             success: true,
-            message: 'Medicine added successfully',
-            medicine
+            message: `Medicine added successfully with ${times.length} reminder(s)`,
+            medicineIds: medicineIds
         });
 
     } catch (error) {
@@ -698,8 +713,9 @@ app.put('/api/medicines/:id', upload.fields([
         // Handle voice alert update
         if (req.files && req.files['voiceFile']) {
             const voiceFile = req.files['voiceFile'][0];
+            const newVoiceAlertId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
             const voiceAlert = {
-                id: Date.now().toString(),
+                id: newVoiceAlertId,
                 user_id: userId,
                 name: alertName || `Voice for ${name}`,
                 file_name: voiceFile.filename,
@@ -771,9 +787,9 @@ app.post('/api/medicines/:id/taken', async (req, res) => {
 
         const medicine = medicines[0];
 
-        // Update medicine status
+        // Update medicine status and decrement stock
         await db.execute(
-            'UPDATE medicines SET status = "taken", taken_at = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE medicines SET status = "taken", taken_at = CURRENT_TIMESTAMP, stock = GREATEST(0, stock - 1) WHERE id = ?',
             [medicineId]
         );
 
@@ -785,8 +801,9 @@ app.post('/api/medicines/:id/taken', async (req, res) => {
         }
 
         // Add to history
+        const historyId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
         const historyEntry = {
-            id: Date.now().toString(),
+            id: historyId,
             user_id: medicine.user_id,
             medicine_id: medicineId,
             medicine_name: medicine.name,
@@ -865,8 +882,9 @@ app.post('/api/medicines/:id/reschedule', async (req, res) => {
         const newTimeString = newTime.toTimeString().slice(0, 5);
 
         // Add to history as rescheduled
+        const historyId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
         const historyEntry = {
-            id: Date.now().toString(),
+            id: historyId,
             user_id: medicine.user_id,
             medicine_id: medicineId,
             medicine_name: medicine.name,
@@ -1060,7 +1078,7 @@ app.put('/api/users/profile', upload.single('profilePhoto'), async (req, res) =>
     }
 });
 
-// History Routes
+// History Routes with filtering
 app.get('/api/history', async (req, res) => {
     try {
         const userId = req.headers['user-id'];
@@ -1070,11 +1088,28 @@ app.get('/api/history', async (req, res) => {
                 message: 'User ID required'
             });
         }
+
+        const { range = '30', status = 'all' } = req.query;
         
-        const [history] = await db.execute(
-            'SELECT * FROM history WHERE user_id = ? ORDER BY created_at DESC',
-            [userId]
-        );
+        let query = 'SELECT * FROM history WHERE user_id = ?';
+        const params = [userId];
+
+        // Add date range filter
+        if (range !== 'all') {
+            const days = parseInt(range);
+            query += ' AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
+            params.push(days);
+        }
+
+        // Add status filter
+        if (status !== 'all') {
+            query += ' AND status = ?';
+            params.push(status);
+        }
+
+        query += ' ORDER BY created_at DESC';
+
+        const [history] = await db.execute(query, params);
 
         res.json({
             success: true,
@@ -1090,7 +1125,7 @@ app.get('/api/history', async (req, res) => {
     }
 });
 
-// Export history
+// Enhanced Export history - FIXED DATE FORMAT
 app.get('/api/export/history', async (req, res) => {
     try {
         const userId = req.headers['user-id'];
@@ -1106,25 +1141,32 @@ app.get('/api/export/history', async (req, res) => {
             [userId]
         );
         
-        let csvContent = 'Date,Time,Medicine,Dosage,Scheduled Time,Actual Time,Status,Notes\n';
+        let csvContent = 'Medicine,Dosage,Scheduled Time,Actual Time,Status,Notes\n';
+        
         history.forEach(record => {
-            const date = new Date(record.created_at);
-            const formattedDate = date.toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-            });
-            const formattedTime = date.toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-            });
+            // FIXED: Proper date formatting for CSV export
+            // const date = new Date(record.created_at);
+            // const formattedDate = date.toLocaleDateString('en-US', {
+            //     year: 'numeric',
+            //     month: '2-digit',
+            //     day: '2-digit'
+            // });
             
-            csvContent += `"${formattedDate}","${formattedTime}","${record.medicine_name}","${record.dosage}","${record.scheduled_time}","${record.actual_time || '-'}","${record.status}","${record.notes || '-'}"\n`;
+            // Handle actual_time - use stored value directly
+            const actualTime = record.actual_time && record.actual_time !== 'null' ? 
+                record.actual_time : '-';
+            
+            // Escape quotes and commas for CSV
+            const escapeCSV = (str) => {
+                if (!str) return '';
+                return `"${String(str).replace(/"/g, '""')}"`;
+            };
+            
+            csvContent += `${escapeCSV(record.medicine_name)},${escapeCSV(record.dosage)},${escapeCSV(record.scheduled_time)},${escapeCSV(actualTime)},${escapeCSV(record.status)},${escapeCSV(record.notes)}\n`;
         });
 
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename=meditrack-history.csv');
+        res.setHeader('Content-Disposition', `attachment; filename=meditrack-history-${new Date().toISOString().split('T')[0]}.csv`);
         res.send(csvContent);
 
     } catch (error) {
@@ -1141,6 +1183,14 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
+// 404 handler
+app.use('*', (req, res) => {
+    res.status(404).json({
+        success: false,
+        message: 'Endpoint not found'
+    });
+});
+
 // Error handling middleware
 app.use((error, req, res, next) => {
     if (error instanceof multer.MulterError) {
@@ -1151,9 +1201,11 @@ app.use((error, req, res, next) => {
             });
         }
     }
+    
+    console.error('Server error:', error);
     res.status(500).json({
         success: false,
-        message: error.message
+        message: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
 });
 
@@ -1163,5 +1215,6 @@ app.listen(PORT, () => {
     console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
     console.log(`🌐 Frontend: http://localhost:${PORT}/`);
     console.log(`💾 Database: MySQL connected`);
-    console.log(`⏰ Reminder checker running every 10 seconds`);
+    console.log(`⏰ Reminder checker running every 30 seconds`);
+    console.log(`📁 Upload directories ready`);
 });

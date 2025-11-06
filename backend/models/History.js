@@ -10,6 +10,13 @@ class History {
     );
     return result.insertId;
   }
+  static async findTodayByMedicineId(medicineId) {
+    const [history] = await db.execute(
+      'SELECT * FROM history WHERE medicine_id = ? AND DATE(created_at) = CURDATE() AND status = "taken"',
+      [medicineId]
+    );
+    return history;
+  }
 
   static async findByUserId(userId, days = 30) {
     const [rows] = await pool.execute(
