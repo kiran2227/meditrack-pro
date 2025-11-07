@@ -1,134 +1,85 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const path = require('path');
+const fs = require('fs');
+const VoiceAlert = require('../models/VoiceAlert');
 
-const JWT_SECRET = 'meditrack-secret-key-2024';
-
-class AuthController {
-  static async register(req, res) {
+class VoiceController {
+  static async uploadVoiceAlert(req, res) {
     try {
-      const { name, email, password, age, medical_history, guardian_name, guardian_contact } = req.body;
-
-      if (!name || !email || !password) {
+      if (!req.file) {
         return res.status(400).json({
           success: false,
-          message: 'Name, email and password are required'
+          message: 'No file uploaded'
         });
       }
 
-      // Check if user exists
-      const existingUser = await User.findByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: 'User already exists with this email'
-        });
-      }
+      const { medicineId } = req.body;
+      const file = req.file;
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      // Create user
-      const userId = await User.create({
-        name,
-        email,
-        password: hashedPassword,
-        age,
-        medical_history,
-        guardian_name,
-        guardian_contact
+      const voiceAlertId = await VoiceAlert.create({
+        user_id: req.user.userId,
+        medicine_id: medicineId || null,
+        file_name: file.originalname,
+        file_path: file.path,
+        is_default: !medicineId
       });
 
-      // Generate token
-      const token = jwt.sign(
-        { userId, email },
-        JWT_SECRET,
-        { expiresIn: '30d' }
-      );
-
-      res.status(201).json({
+      res.json({
         success: true,
-        message: 'User registered successfully',
-        token,
-        user: {
-          id: userId,
-          name,
-          email,
-          age,
-          medical_history,
-          guardian_name,
-          guardian_contact
+        message: 'Voice alert uploaded successfully',
+        voiceAlert: {
+          id: voiceAlertId,
+          file_name: file.originalname,
+          file_path: file.path
         }
       });
 
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('Upload voice error:', error);
       res.status(500).json({
         success: false,
-        message: 'Internal server error'
+        message: 'Failed to upload voice alert'
       });
     }
   }
 
-  static async login(req, res) {
+  static async getVoiceAlerts(req, res) {
     try {
-      const { email, password } = req.body;
-
-      if (!email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email and password are required'
-        });
-      }
-
-      // Find user
-      const user = await User.findByEmail(email);
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid credentials'
-        });
-      }
-
-      // Check password
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (!isPasswordValid) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid credentials'
-        });
-      }
-
-      // Generate token
-      const token = jwt.sign(
-        { userId: user.id, email: user.email },
-        JWT_SECRET,
-        { expiresIn: '30d' }
-      );
-
+      const voiceAlerts = await VoiceAlert.findByUserId(req.user.userId);
       res.json({
         success: true,
-        message: 'Login successful',
-        token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          age: user.age,
-          medical_history: user.medical_history,
-          guardian_name: user.guardian_name,
-          guardian_contact: user.guardian_contact
-        }
+        voiceAlerts
       });
-
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Get voice alerts error:', error);
       res.status(500).json({
         success: false,
-        message: 'Internal server error'
+        message: 'Failed to fetch voice alerts'
+      });
+    }
+  }
+
+  static async serveVoiceFile(req, res) {
+    try {
+      const { filename } = req.params;
+      const filePath = path.join(__dirname, '../uploads/voice-alerts', filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({
+          success: false,
+          message: 'File not found'
+        });
+      }
+
+      res.sendFile(filePath);
+
+    } catch (error) {
+      console.error('Serve voice file error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to serve voice file'
       });
     }
   }
 }
 
-module.exports = AuthController;
+module.exports = VoiceController;

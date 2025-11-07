@@ -512,6 +512,43 @@ app.get('/api/voice', async (req, res) => {
     }
 });
 
+// NEW: Get single voice alert by id
+app.get('/api/voice/:id', async (req, res) => {
+    try {
+        const voiceId = req.params.id;
+        const userId = req.headers['user-id'];
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'User ID required'
+            });
+        }
+
+        const [rows] = await db.execute(
+            'SELECT * FROM voice_alerts WHERE id = ? AND user_id = ?',
+            [voiceId, userId]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Voice alert not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            voiceAlert: rows[0]
+        });
+    } catch (error) {
+        console.error('Get voice by id error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch voice alert'
+        });
+    }
+});
+
 // Medicine Routes - FIXED with time validation
 app.get('/api/medicines', async (req, res) => {
     try {
@@ -778,6 +815,15 @@ app.post('/api/medicines/:id/taken', async (req, res) => {
 
         const medicine = medicines[0];
 
+        // FIXED: idempotent mark-as-taken — only decrement stock and change status if not already 'taken'
+        if (medicine.status === 'taken') {
+            console.log(`ℹ️ Medicine ${medicineId} already marked as taken; ignoring duplicate request.`);
+            return res.json({
+                success: true,
+                message: 'Medicine already marked as taken'
+            });
+        }
+
         await db.execute(
             'UPDATE medicines SET status = "taken", taken_at = CURRENT_TIMESTAMP, stock = GREATEST(0, stock - 1) WHERE id = ?',
             [medicineId]
@@ -845,6 +891,26 @@ app.post('/api/medicines/:id/reschedule', async (req, res) => {
 
         const medicine = medicines[0];
 
+        // FIXED: compute new HH:MM time from remindInMinutes and update the medicine record
+        const minutes = parseInt(remindInMinutes, 10);
+        if (isNaN(minutes) || minutes < 1) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid remindInMinutes'
+            });
+        }
+
+        const newDate = new Date(Date.now() + minutes * 60 * 1000);
+        const hh = String(newDate.getHours()).padStart(2, '0');
+        const mm = String(newDate.getMinutes()).padStart(2, '0');
+        const newTime = `${hh}:${mm}`;
+
+        // Update medicine time so the dashboard will reflect the rescheduled time
+        await db.execute(
+            'UPDATE medicines SET time = ?, status = "pending" WHERE id = ? AND user_id = ?',
+            [newTime, medicineId, userId]
+        );
+
         // Clear current reminder
         activeReminders.delete(medicineId);
 
@@ -855,12 +921,13 @@ app.post('/api/medicines/:id/reschedule', async (req, res) => {
             `INSERT INTO history (id, user_id, medicine_id, medicine_name, dosage, scheduled_time, 
              actual_time, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [historyId, userId, medicineId, medicine.name, medicine.dosage, medicine.time,
-             null, 'rescheduled', `Rescheduled for ${remindInMinutes} minutes later`]
+             null, 'rescheduled', `Rescheduled for ${minutes} minutes later (new time: ${newTime})`]
         );
 
         res.json({
             success: true,
-            message: `Medicine will remind you again in ${remindInMinutes} minutes`
+            message: `Medicine will remind you again in ${minutes} minutes`,
+            newTime
         });
 
     } catch (error) {

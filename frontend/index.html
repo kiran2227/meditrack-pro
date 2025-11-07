@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>MediTrack Pro - Smart Medicine Management</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -721,5 +721,118 @@
     <script src="js/auth.js"></script>
     <script src="js/voice.js"></script>
     <script src="js/app.js"></script>
+
+    <!-- Inline small glue code: toggles, test button, and hideReminderModal patch -->
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Voice section auto-toggle (add) ---
+        const voiceSelect = document.getElementById('voiceAlertType');
+        if (voiceSelect) {
+            voiceSelect.addEventListener('change', () => {
+                const v = voiceSelect.value;
+                const rec = document.getElementById('recordingSection');
+                const upl = document.getElementById('uploadVoiceSection');
+                if (rec) rec.style.display = v === 'record' ? 'block' : 'none';
+                if (upl) upl.style.display = v === 'upload' ? 'block' : 'none';
+            });
+        }
+
+        // --- Voice section auto-toggle (edit) ---
+        const editVoiceSelect = document.getElementById('editVoiceAlertType');
+        if (editVoiceSelect) {
+            editVoiceSelect.addEventListener('change', () => {
+                const v = editVoiceSelect.value;
+                const rec = document.getElementById('editRecordingSection');
+                const upl = document.getElementById('editUploadVoiceSection');
+                if (rec) rec.style.display = v === 'record' ? 'block' : 'none';
+                if (upl) upl.style.display = v === 'upload' ? 'block' : 'none';
+            });
+        }
+
+        // --- Frequency initial toggle ---
+        if (typeof toggleTimeInputs === 'function') {
+            try { toggleTimeInputs(); } catch (e) {}
+        }
+
+        // --- Create quick Test Reminder button (dev-only) ---
+        const testBtn = document.createElement('button');
+        testBtn.id = 'testVoiceBtn';
+        testBtn.innerHTML = '<i class="fas fa-volume-up"></i> Test Reminder';
+        Object.assign(testBtn.style, {
+            position: 'fixed',
+            bottom: '12px',
+            right: '12px',
+            zIndex: '9999',
+            background: '#2563eb',
+            color: 'white',
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.12)'
+        });
+        document.body.appendChild(testBtn);
+
+        testBtn.addEventListener('click', () => {
+            if (window.app && window.app.startVoiceLoop) {
+                window.app.startVoiceLoop({
+                    id: 'debug1',
+                    name: 'Test Medicine',
+                    dosage: '250 mg',
+                    voice_alert_type: 'default',
+                    voice_alert_id: null
+                });
+                // show modal quickly
+                if (document.getElementById('reminderModal')) {
+                    document.getElementById('reminderModal').classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                }
+                alert('🎧 Testing reminder voice now — close the reminder or click Taken to stop.');
+            } else {
+                alert('App not ready yet. Please wait a moment.');
+            }
+        });
+    });
+
+    // --- Patch: ensure hideReminderModal exists even if app.js didn't define it ---
+    (function patchHideReminder() {
+        // Wait until app is defined (it is created at end of app.js). If not defined yet, poll briefly.
+        function attach() {
+            if (window.app) {
+                if (typeof window.app.hideReminderModal !== 'function') {
+                    window.app.hideReminderModal = function() {
+                        const modal = document.getElementById('reminderModal');
+                        if (modal) modal.classList.remove('active');
+                        try { document.body.style.overflow = ''; } catch (e) {}
+                        // stop any playing voice/TTS loop
+                        if (typeof this.stopVoiceLoop === 'function') {
+                            try { this.stopVoiceLoop(); } catch(e) { console.warn(e); }
+                        } else {
+                            // best-effort: stop speechSynthesis
+                            try { speechSynthesis.cancel(); } catch(e) {}
+                            // try to pause any reminder audio element created
+                            if (this.reminderLoopAudio) {
+                                try { this.reminderLoopAudio.pause(); this.reminderLoopAudio.currentTime = 0; } catch(e) {}
+                                this.reminderLoopAudio = null;
+                            }
+                        }
+                        this.currentReminderMedicine = null;
+                    };
+                }
+                return true;
+            }
+            return false;
+        }
+
+        let tries = 0;
+        const maxTries = 20;
+        const interval = setInterval(() => {
+            tries++;
+            if (attach() || tries >= maxTries) {
+                clearInterval(interval);
+            }
+        }, 150);
+    })();
+    </script>
 </body>
 </html>
