@@ -329,7 +329,7 @@ class AuthManager {
                     if (window.app && window.app.showDashboard) {
                         window.app.showDashboard();
                     }
-                }, 1500);
+                }, 1000);
                 
             } else {
                 this.showAuthError(data.message || 'Login failed. Please check your credentials.');
