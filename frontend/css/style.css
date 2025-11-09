@@ -864,3 +864,117 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--gray-500);
 }
+@keyframes blinkPopup {
+  0% { box-shadow: 0 0 10px rgba(255,0,0,0.2); }
+  50% { box-shadow: 0 0 20px rgba(255,0,0,0.6); }
+  100% { box-shadow: 0 0 10px rgba(255,0,0,0.2); }
+}
+#reminderModal.active .modal-content {
+  animation: blinkPopup 1.5s infinite;
+}
+.popup-overlay ul {
+  text-align: left;
+  padding-left: 20px;
+  margin: 10px 0;
+  color: #333;
+}
+.popup-overlay ul li {
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+.popup-overlay h3 {
+  color: #111;
+  margin-bottom: 8px;
+}
+#lowStockBanner {
+  margin-top: 8px !important;
+  margin-bottom: 12px !important;
+  width: calc(100% - 40px);
+  margin-left: auto;
+  margin-right: auto;
+}
+/* 🔹 Summary cards layout fix */
+#dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  text-align: center;
+  padding: 20px;
+  flex: 1;
+}
+
+.summary-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+
+/* ---------- Summary Cards Layout ---------- */
+.summary-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 18px;
+  margin: 16px 0;
+}
+
+.summary-card {
+  flex: 1 1 22%;
+  min-width: 220px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-3px);
+}
+
+.summary-icon {
+  font-size: 36px;
+  margin-bottom: 10px;
+}
+
+.summary-icon.taken i { color: #22c55e; }   /* green */
+.summary-icon.pending i { color: #facc15; } /* yellow */
+.summary-icon.missed i { color: #ef4444; }  /* red */
+.summary-icon.stock i { color: #3b82f6; }   /* blue */
+
+.summary-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.summary-label {
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+/* Responsive fix */
+@media (max-width: 1024px) {
+  .summary-card { flex: 1 1 45%; }
+}
+@media (max-width: 640px) {
+  .summary-card { flex: 1 1 100%; }
+}
+/* 🔁 Only active section should show */
+.content-section {
+  display: none;
+}
+.content-section.active {
+  display: block;
+}

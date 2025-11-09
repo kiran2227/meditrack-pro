@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Mic Test</title>
+</head>
+<body>
+  <h3>Simple Mic Test</h3>
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  <audio id="player" controls style="display:block;margin-top:10px;"></audio>
+
+<script>
+let rec, chunks = [];
+
+document.getElementById("startBtn").addEventListener("click", async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    rec = new MediaRecorder(stream);
+    chunks = [];
+    rec.ondataavailable = e => chunks.push(e.data);
+    rec.onstop = () => {
+      const blob = new Blob(chunks, { type: "audio/webm;codecs=opus" });
+      const url = URL.createObjectURL(blob);
+      const player = document.getElementById("player");
+      player.src = url;
+      player.volume = 1.0;
+      player.play();
+    };
+    rec.start();
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    console.log("🎤 Recording started");
+  } catch (err) {
+    alert("Mic access failed: " + err.message);
+    console.error(err);
+  }
+});
+
+document.getElementById("stopBtn").addEventListener("click", () => {
+  rec.stop();
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
+  console.log("🛑 Recording stopped");
+});
+</script>
+</body>
+</html>
