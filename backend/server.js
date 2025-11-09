@@ -114,9 +114,17 @@ initializeDatabase().then(connection => {
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'User-ID']
+}));
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
+// ✅ Serve uploaded files publicly
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -189,6 +197,7 @@ uploadsDirs.forEach(dir => {
 console.log('✅ Upload directories created');
 
 // FIXED: Enhanced reminder checking with proper time comparison
+// ✅ Proper reminder checking function
 async function checkReminders() {
     try {
         const [medicines] = await db.execute(
@@ -200,11 +209,11 @@ async function checkReminders() {
         const currentMinutes = now.getMinutes().toString().padStart(2, '0');
         const currentTime = `${currentHours}:${currentMinutes}`;
 
-        console.log(`⏰ Checking ${medicines.length} medicines at ${currentTime}`);
+        //console.log(`⏰ Checking ${medicines.length} medicines at ${currentTime}`);
 
         for (const medicine of medicines) {
             let medicineTime = medicine.time;
-            
+
             // Convert TIME to HH:MM format
             if (medicineTime instanceof Date) {
                 medicineTime = medicineTime.toTimeString().slice(0, 5);
@@ -213,13 +222,12 @@ async function checkReminders() {
                 medicineTime = medicineTime.slice(0, 5);
             }
 
-            console.log(`💊 ${medicine.name}: ${medicineTime} vs Current: ${currentTime}`);
-
+            // Compare and trigger reminder
             if (medicineTime === currentTime) {
                 if (!activeReminders.has(medicine.id)) {
                     console.log(`🔔 REMINDER TRIGGERED: ${medicine.name} for user ${medicine.user_id}`);
                     activeReminders.set(medicine.id, medicine);
-                    
+
                     if (medicine.stock <= medicine.refill_reminder && medicine.refill_reminder > 0) {
                         console.log(`⚠️ LOW STOCK: ${medicine.name} has ${medicine.stock} doses left`);
                     }
@@ -231,30 +239,35 @@ async function checkReminders() {
                 }
             }
         }
-        
-        console.log(`📊 Active reminders: ${activeReminders.size}`);
 
+       // console.log(`📊 Active reminders: ${activeReminders.size}`);
     } catch (error) {
         console.error('❌ Error checking reminders:', error);
     }
 }
 
-// Check reminders every 30 seconds
+// ✅ Run reminder checker every 30 seconds
 setInterval(checkReminders, 30000);
-// Also check immediately on startup
+
+// ✅ Also run once immediately at startup
 setTimeout(checkReminders, 1000);
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// ✅ Separate cleanup task (runs once per 24h)
+setInterval(async () => {
+    try {
+        const [expired] = await db.execute(
+            'SELECT id, name FROM medicines WHERE end_date IS NOT NULL AND end_date < CURDATE()'
+        );
+        if (expired.length > 0) {
+            const ids = expired.map(x => x.id);
+            await db.execute('DELETE FROM medicines WHERE id IN (?)', [ids]);
+            console.log(`🗑️ Deleted ${ids.length} expired medicines.`);
+        }
+    } catch (err) {
+        console.error('Cleanup error:', err);
+    }
+}, 24 * 60 * 60 * 1000); // Every 24 hours
 
-// Health check
-app.get('/api/health', (req, res) => {
-    res.json({ 
-        success: true, 
-        message: 'MediTrack Pro API is running!',
-        timestamp: new Date().toISOString()
-    });
-});
 
 // Get active reminders - FIXED
 app.get('/api/reminders', async (req, res) => {
@@ -270,7 +283,7 @@ app.get('/api/reminders', async (req, res) => {
         const userReminders = Array.from(activeReminders.values())
             .filter(med => med.user_id === userId);
         
-        console.log(`📋 Sending ${userReminders.length} reminders to user ${userId}`);
+        //console.log(`📋 Sending ${userReminders.length} reminders to user ${userId}`);
         
         res.json({
             success: true,
@@ -550,6 +563,97 @@ app.get('/api/voice/:id', async (req, res) => {
 });
 
 // Medicine Routes - FIXED with time validation
+app.post('/api/medicines', upload.fields([
+    { name: 'medicinePhoto', maxCount: 1 },
+    { name: 'voiceFile', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const { 
+            name, dosage, frequency,
+            medicineTime1, medicineTime2, medicineTime3,
+            stock, refill_reminder, voice_alert_type, alertName,
+            duration_type, duration_days
+        } = req.body;
+        const userId = req.headers['user-id'];
+
+        if (!userId)
+            return res.status(401).json({ success: false, message: 'User ID required' });
+
+        if (!name || !dosage || !medicineTime1)
+            return res.status(400).json({ success: false, message: 'Name, dosage and at least one time are required' });
+
+        // validate times
+        let times = [medicineTime1];
+        if (frequency === 'twice' && medicineTime2) times.push(medicineTime2);
+        else if (frequency === 'thrice' && medicineTime2 && medicineTime3) times.push(medicineTime2, medicineTime3);
+        for (let t of times)
+            if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(t))
+                return res.status(400).json({ success: false, message: `Invalid time format (${t})` });
+
+        // ✅ compute start / end date
+        const startDate = new Date();
+        let endDate = null;
+        if (duration_type === 'week') {
+            endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 7);
+        } else if (duration_type === 'custom' && duration_days) {
+            endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + parseInt(duration_days));
+        }
+
+        // ✅ share same photo for all reminders
+        const photoName = req.files?.medicinePhoto?.[0]?.filename || null;
+
+        // ✅ share same voice for all reminders
+        let voiceAlertId = null;
+        if (req.files?.voiceFile) {
+            const vf = req.files.voiceFile[0];
+            voiceAlertId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+            await db.execute(
+                'INSERT INTO voice_alerts (id,user_id,name,file_name,file_path) VALUES (?,?,?,?,?)',
+                [voiceAlertId, userId, alertName || `Voice for ${name}`, vf.filename, vf.path]
+            );
+        }
+
+        // ✅ create medicines
+        const ids = [];
+        for (let i = 0; i < times.length; i++) {
+            const medId = Date.now().toString() + i + Math.random().toString(36).substr(2, 5);
+            await db.execute(
+                `INSERT INTO medicines 
+                (id,user_id,name,dosage,time,frequency,stock,refill_reminder,
+                 voice_alert_type,voice_alert_id,medicine_photo,status,
+                 duration_type,duration_days,start_date,end_date)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                [
+                    medId, userId, i === 0 ? name : `${name} (Time ${i + 1})`,
+                    dosage, times[i], frequency, stock, refill_reminder,
+                    voice_alert_type, voiceAlertId, photoName, 'pending',
+                    duration_type || 'lifetime',
+                    duration_days || null,
+                    startDate.toISOString().split('T')[0],
+                    endDate ? endDate.toISOString().split('T')[0] : null
+                ]
+            );
+            ids.push(medId);
+        }
+
+        res.status(201).json({
+            success: true,
+            message: `Medicine added with ${times.length} reminder(s)`,
+            medicineIds: ids
+        });
+
+    } catch (error) {
+        console.error('Add medicine error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to add medicine'
+        });
+    }
+});
+
+// Get all medicines
 app.get('/api/medicines', async (req, res) => {
     try {
         const userId = req.headers['user-id'];
@@ -559,116 +663,32 @@ app.get('/api/medicines', async (req, res) => {
                 message: 'User ID required'
             });
         }
-        
+
         const [medicines] = await db.execute(
-            'SELECT * FROM medicines WHERE user_id = ? ORDER BY time ASC',
+            'SELECT * FROM medicines WHERE user_id = ? ORDER BY time',
             [userId]
         );
-        
+
+        // Calculate days left for each medicine
+        for (const m of medicines) {
+            if (m.end_date) {
+                const diff = Math.ceil((new Date(m.end_date) - new Date()) / (1000 * 60 * 60 * 24));
+                m.days_left = diff >= 0 ? diff : 0;
+            } else {
+                m.days_left = null;
+            }
+        }
+
         res.json({
             success: true,
             medicines: medicines
         });
+
     } catch (error) {
         console.error('Get medicines error:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch medicines'
-        });
-    }
-});
-
-app.post('/api/medicines', upload.fields([
-    { name: 'medicinePhoto', maxCount: 1 },
-    { name: 'voiceFile', maxCount: 1 }
-]), async (req, res) => {
-    try {
-        const { name, dosage, frequency, medicineTime1, medicineTime2, medicineTime3, stock, refill_reminder, voice_alert_type, alertName } = req.body;
-        const userId = req.headers['user-id'];
-
-        if (!userId) {
-            return res.status(401).json({
-                success: false,
-                message: 'User ID required'
-            });
-        }
-
-        if (!name || !dosage || !medicineTime1) {
-            return res.status(400).json({
-                success: false,
-                message: 'Name, dosage and at least one time are required'
-            });
-        }
-
-        // Handle multiple times based on frequency
-        let times = [medicineTime1];
-        if (frequency === 'twice' && medicineTime2) {
-            times.push(medicineTime2);
-        } else if (frequency === 'thrice' && medicineTime2 && medicineTime3) {
-            times.push(medicineTime2, medicineTime3);
-        }
-
-        // ✅ VALIDATE TIME FORMATS
-        for (let i = 0; i < times.length; i++) {
-            const time = times[i];
-            if (!time) continue;
-            
-            if (!time.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Invalid time format for time ${i + 1} ("${time}"). Use HH:MM format (24-hour) like "14:30"`
-                });
-            }
-        }
-
-        // Create separate medicine entries for each time
-        const medicineIds = [];
-        for (let i = 0; i < times.length; i++) {
-            const time = times[i];
-            if (!time) continue;
-            
-            let medicinePhoto = null;
-            let voiceAlertId = null;
-
-            if (i === 0 && req.files && req.files['medicinePhoto']) {
-                medicinePhoto = req.files['medicinePhoto'][0].filename;
-            }
-
-            if (i === 0 && req.files && req.files['voiceFile']) {
-                const voiceFile = req.files['voiceFile'][0];
-                voiceAlertId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-                
-                await db.execute(
-                    'INSERT INTO voice_alerts (id, user_id, name, file_name, file_path) VALUES (?, ?, ?, ?, ?)',
-                    [voiceAlertId, userId, alertName || `Voice for ${name}`, voiceFile.filename, voiceFile.path]
-                );
-            }
-
-            const medicineId = Date.now().toString() + i + Math.random().toString(36).substr(2, 5);
-            
-            await db.execute(
-                `INSERT INTO medicines (id, user_id, name, dosage, time, frequency, stock, refill_reminder, 
-                 voice_alert_type, voice_alert_id, medicine_photo, status) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [medicineId, userId, i === 0 ? name : `${name} (Time ${i + 1})`, dosage, time, 
-                 frequency, stock, refill_reminder, voice_alert_type,
-                 voiceAlertId, medicinePhoto, 'pending']
-            );
-
-            medicineIds.push(medicineId);
-        }
-
-        res.status(201).json({
-            success: true,
-            message: `Medicine added successfully with ${times.length} reminder(s)`,
-            medicineIds: medicineIds
-        });
-
-    } catch (error) {
-        console.error('Add medicine error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to add medicine'
         });
     }
 });
@@ -788,82 +808,58 @@ app.put('/api/medicines/:id', upload.fields([
     }
 });
 
+// Mark medicine as taken
 app.post('/api/medicines/:id/taken', async (req, res) => {
     try {
         const medicineId = req.params.id;
         const { notes } = req.body;
         const userId = req.headers['user-id'];
+        if (!userId) return res.status(401).json({ success: false, message: 'User ID required' });
 
-        if (!userId) {
-            return res.status(401).json({
-                success: false,
-                message: 'User ID required'
-            });
-        }
+        const [rows] = await db.execute('SELECT * FROM medicines WHERE id = ? AND user_id = ?', [medicineId, userId]);
+        if (rows.length === 0)
+            return res.status(404).json({ success: false, message: 'Medicine not found' });
+        const med = rows[0];
 
-        const [medicines] = await db.execute(
-            'SELECT * FROM medicines WHERE id = ? AND user_id = ?',
-            [medicineId, userId]
-        );
+        if (med.status === 'taken')
+            return res.json({ success: true, message: 'Already marked taken' });
 
-        if (medicines.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Medicine not found'
-            });
-        }
+        // ✅ reduce by dosage
+        const dosageInt = parseInt(med.dosage) || 1;
+        const newStock = Math.max(0, med.stock - dosageInt);
 
-        const medicine = medicines[0];
+        // ✅ Update all medicines with the same name for this user
+// ✅ 1. Reduce stock for all same medicines (shared stock)
+await db.execute(`
+    UPDATE medicines 
+    SET stock = ? 
+    WHERE user_id = ? AND name LIKE ?
+`, [newStock, userId, `${med.name.split(' ')[0]}%`]);
 
-        // FIXED: idempotent mark-as-taken — only decrement stock and change status if not already 'taken'
-        if (medicine.status === 'taken') {
-            console.log(`ℹ️ Medicine ${medicineId} already marked as taken; ignoring duplicate request.`);
-            return res.json({
-                success: true,
-                message: 'Medicine already marked as taken'
-            });
-        }
+// ✅ 2. Mark only the current medicine as "taken"
+await db.execute(`
+    UPDATE medicines 
+    SET status = "taken", taken_at = CURRENT_TIMESTAMP 
+    WHERE id = ? AND user_id = ?
+`, [medicineId, userId]);
 
+
+        // ✅ add to history
+        const hid = Date.now().toString() + Math.random().toString(36).substr(2, 8);
+        const actualTime = new Date().toISOString().slice(0, 16).replace('T', ' ');
         await db.execute(
-            'UPDATE medicines SET status = "taken", taken_at = CURRENT_TIMESTAMP, stock = GREATEST(0, stock - 1) WHERE id = ?',
-            [medicineId]
+            'INSERT INTO history (id,user_id,medicine_id,medicine_name,dosage,scheduled_time,actual_time,status,notes) VALUES (?,?,?,?,?,?,?,?,?)',
+            [hid, userId, medicineId, med.name, med.dosage, med.time, actualTime, 'taken', notes || '']
         );
 
-        // Clear from active reminders
-        activeReminders.delete(medicineId);
-
-        // Add to history
-        const historyId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-        const actualTime = new Date().toLocaleString('en-US', { 
-            year: 'numeric', 
-            month: '2-digit', 
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false 
-        });
-
-        await db.execute(
-            `INSERT INTO history (id, user_id, medicine_id, medicine_name, dosage, scheduled_time, 
-             actual_time, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [historyId, userId, medicineId, medicine.name, medicine.dosage, medicine.time,
-             actualTime, 'taken', notes || '']
-        );
-
-        res.json({
-            success: true,
-            message: 'Medicine marked as taken'
-        });
-
-    } catch (error) {
-        console.error('Mark as taken error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update medicine'
-        });
+        res.json({ success: true, message: `Stock reduced by ${dosageInt}. Remaining: ${newStock}` });
+    } catch (err) {
+        console.error('Taken error:', err);
+        res.status(500).json({ success: false, message: 'Failed to update' });
     }
 });
 
+// Reschedule medicine
 app.post('/api/medicines/:id/reschedule', async (req, res) => {
     try {
         const medicineId = req.params.id;
@@ -939,6 +935,7 @@ app.post('/api/medicines/:id/reschedule', async (req, res) => {
     }
 });
 
+// Delete medicine
 app.delete('/api/medicines/:id', async (req, res) => {
     try {
         const medicineId = req.params.id;
@@ -1153,10 +1150,9 @@ app.get('/api/export/history', async (req, res) => {
             [userId]
         );
         
-        let csvContent = 'Date,Medicine,Dosage,Scheduled Time,Actual Time,Status,Notes\n';
+        let csvContent = 'Medicine,Dosage,Scheduled Time,Actual Time,Status,Notes\n';
         
         history.forEach(record => {
-            const date = new Date(record.created_at).toLocaleDateString();
             const actualTime = record.actual_time && record.actual_time !== 'null' ? 
                 record.actual_time : '-';
             
@@ -1165,7 +1161,7 @@ app.get('/api/export/history', async (req, res) => {
                 return `"${String(str).replace(/"/g, '""')}"`;
             };
             
-            csvContent += `${escapeCSV(date)},${escapeCSV(record.medicine_name)},${escapeCSV(record.dosage)},${escapeCSV(record.scheduled_time)},${escapeCSV(actualTime)},${escapeCSV(record.status)},${escapeCSV(record.notes)}\n`;
+            csvContent += `${escapeCSV(record.medicine_name)},${escapeCSV(record.dosage)},${escapeCSV(record.scheduled_time)},${escapeCSV(actualTime)},${escapeCSV(record.status)},${escapeCSV(record.notes)}\n`;
         });
 
         res.setHeader('Content-Type', 'text/csv');
@@ -1178,6 +1174,50 @@ app.get('/api/export/history', async (req, res) => {
             success: false,
             message: 'Failed to export history'
         });
+    }
+});
+
+// ✅ Get all low stock medicines
+app.get('/api/low-stock', async (req, res) => {
+    try {
+        const userId = req.headers['user-id'];
+        if (!userId) return res.status(401).json({ success: false, message: 'User ID required' });
+
+        const [rows] = await db.execute(`
+            SELECT * FROM medicines 
+            WHERE user_id = ? AND stock <= refill_reminder AND stock > 0
+        `, [userId]);
+
+        res.json({ success: true, medicines: rows });
+    } catch (err) {
+        console.error('Error fetching low stock:', err);
+        res.status(500).json({ success: false, message: 'Failed to load low stock medicines' });
+    }
+});
+
+// ✅ Get missed medicines (not taken after 12 hours)
+app.get('/api/missed', async (req, res) => {
+    try {
+        const userId = req.headers['user-id'];
+        if (!userId) return res.status(401).json({ success: false, message: 'User ID required' });
+
+        // Mark medicines as missed automatically
+        await db.execute(`
+            UPDATE medicines 
+            SET status = 'missed'
+            WHERE user_id = ? AND status = 'pending' 
+            AND TIMESTAMPDIFF(HOUR, time, CURRENT_TIME()) >= 12
+        `, [userId]);
+
+        const [rows] = await db.execute(`
+            SELECT * FROM medicines 
+            WHERE user_id = ? AND status = 'missed'
+        `, [userId]);
+
+        res.json({ success: true, medicines: rows });
+    } catch (err) {
+        console.error('Error fetching missed medicines:', err);
+        res.status(500).json({ success: false, message: 'Failed to load missed medicines' });
     }
 });
 
@@ -1211,12 +1251,35 @@ app.use((error, req, res, next) => {
         message: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
 });
+// 🧹 Daily cleanup for expired medicines
+setInterval(async () => {
+  try {
+    console.log("🧹 Checking for expired medicines...");
+    const [expired] = await db.execute(
+      'SELECT * FROM medicines WHERE end_date IS NOT NULL AND end_date < CURDATE()'
+    );
+
+    if (expired.length > 0) {
+      for (const med of expired) {
+        await db.execute(
+          'INSERT INTO history (user_id, medicine_name, dosage, scheduled_time, actual_time, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [med.user_id, med.name, med.dosage, med.time, new Date(), 'expired', 'Medicine duration ended']
+        );
+        await db.execute('DELETE FROM medicines WHERE id = ?', [med.id]);
+      }
+      console.log(`🗑️ ${expired.length} expired medicines removed.`);
+    }
+  } catch (err) {
+    console.error('❌ Cleanup error:', err);
+  }
+}, 24 * 60 * 60 * 1000); // every 24h
+
 
 // Start server
 app.listen(PORT, () => {
     console.log(`\n🚀 MediTrack Pro server running on http://localhost:${PORT}`);
     console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-    console.log(`🌐 Frontend: http://localhost:${PORT}/`);
+  //  console.log(`🌐 Frontend: http://localhost:${PORT}/`);
     console.log(`💾 Database: MySQL connected`);
-    console.log(`⏰ Reminder checker running every 30 seconds`);
+    //console.log(`⏰ Reminder checker running every 30 seconds`);
 });
