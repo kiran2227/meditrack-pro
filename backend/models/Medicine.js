@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const db = require('../config/database');
 
 class Medicine {
   // ✅ Create a new medicine record
@@ -76,6 +76,31 @@ class Medicine {
     );
     return rows;
   }
-}
 
+  // ✅ Generic update method (used in edit functionality)
+  static async update(id, fields) {
+    // Convert JS object to SQL SET clause dynamically
+    const updates = [];
+    const values = [];
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined) {
+        updates.push(`${key} = ?`);
+        values.push(value);
+      }
+    }
+
+    if (updates.length === 0) return;
+
+    const sql = `UPDATE medicines SET ${updates.join(', ')} WHERE id = ?`;
+    values.push(id);
+
+    await db.execute(sql, values);
+  }
+
+  // ✅ Combined update for both status and stock (optional convenience)
+  static async updateStatusAndStock(id, status, stock) {
+    await db.execute(`UPDATE medicines SET status = ?, stock = ? WHERE id = ?`, [status, stock, id]);
+  }
+}
 module.exports = Medicine;

@@ -296,8 +296,8 @@ class DashboardManager {
             formData.append('voiceFile', this.audioBlob, `${alertName}.wav`);
             formData.append('alertName', alertName);
 
-            const response = await this.apiCall('/api/voice/upload', 'POST', formData, true);
-            const result = await response.json();
+            const result = await app.apiCall('/api/voice/upload', 'POST', formData, true);
+            
 
             if (result.success) {
                 this.showNotification('Voice alert saved successfully!', 'success');
@@ -442,8 +442,8 @@ class DashboardManager {
             formData.append('voiceFile', this.editAudioBlob, `${alertName}.wav`);
             formData.append('alertName', alertName);
 
-            const response = await this.apiCall('/api/voice/upload', 'POST', formData, true);
-            const result = await response.json();
+            const result = await app.apiCall('/api/voice/upload', 'POST', formData, true);
+           // const result = await response.json();
 
             if (result.success) {
                 this.showNotification('Voice alert saved successfully!', 'success');
@@ -622,8 +622,8 @@ class DashboardManager {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
             btn.disabled = true;
 
-            const response = await this.apiCall('/api/medicines', 'POST', formData, true);
-            const result = await response.json();
+            const result = await app.apiCall('/api/medicines', 'POST', formData, true);
+            // const result = await response.json();
 
             if (result.success) {
                 this.showNotification(`Medicine added successfully with ${result.medicineIds?.length || 1} reminder(s)!`, 'success');
@@ -656,8 +656,8 @@ class DashboardManager {
                 return;
             }
 
-            const response = await this.apiCall(`/api/medicines/${medicineId}`, 'GET');
-            const result = await response.json();
+            const result = await app.apiCall(`/api/medicines/${medicineId}`, 'GET');
+           // const result = await response.json();
 
             if (result.success) {
                 const medicine = result.medicine;
@@ -742,8 +742,8 @@ class DashboardManager {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
             btn.disabled = true;
 
-            const response = await this.apiCall(`/api/medicines/${this.editingMedicineId}`, 'PUT', formData, true);
-            const result = await response.json();
+            const result= await app.apiCall(`/api/medicines/${this.editingMedicineId}`, 'PUT', formData, true);
+           
 
             if (result.success) {
                 this.showNotification('Medicine updated successfully!', 'success');
@@ -843,8 +843,8 @@ class DashboardManager {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
             btn.disabled = true;
 
-            const response = await this.apiCall('/api/users/profile', 'PUT', formData, true);
-            const result = await response.json();
+            const result= await app.apiCall('/api/users/profile', 'PUT', formData, true);
+            //const result = await response.json();
 
             if (result.success) {
                 this.showNotification('Profile updated successfully!', 'success');
@@ -997,34 +997,6 @@ class DashboardManager {
     }
 
     // API helper method
-    async apiCall(endpoint, method = 'GET', data = null, isFormData = false) {
-    const url = `http://localhost:5000${endpoint}`;
-    const user = JSON.parse(localStorage.getItem('meditrack_user'));
-    const headers = { 'User-ID': user?.id || '' };
-
-    // Only add JSON header when not sending FormData
-    if (!isFormData && method !== 'GET') {
-        headers['Content-Type'] = 'application/json';
-    }
-
-    const options = { 
-        method, 
-        headers,
-        mode: 'cors'
-    };
-
-    if (data && (method === 'POST' || method === 'PUT')) {
-        options.body = isFormData ? data : JSON.stringify(data);
-    }
-
-    const response = await fetch(url, options);
-    if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        throw new Error(`HTTP ${response.status} ${response.statusText} ${text}`);
-    }
-
-    return await response.json();
-}
 
 }
 
@@ -1505,22 +1477,20 @@ class MediTrackApp {
         this.currentReminderMedicine = null;
     }
 
-    startVoiceLoop(medicine) {
-        if (this.reminderLoopInterval) {
-            clearInterval(this.reminderLoopInterval);
-        }
+ startVoiceLoop(medicine) {
+    this.stopVoiceLoop(); // clear old loop first
+    this.playVoiceAlert(medicine);
 
-        this.playVoiceAlert(medicine);
-
-        this.reminderLoopInterval = setInterval(() => {
+    // Repeat when audio ends
+    if (this.currentAudio) {
+        this.currentAudio.onended = () => {
             if (this.isReminderActive() && this.currentReminderMedicine?.id === medicine.id) {
                 this.playVoiceAlert(medicine);
-            } else {
-                clearInterval(this.reminderLoopInterval);
-                this.reminderLoopInterval = null;
             }
-        }, 30000); // Repeat every 30 seconds
+        };
     }
+}
+
 
     stopVoiceLoop() {
         if (this.reminderLoopInterval) {
@@ -1808,33 +1778,47 @@ class MediTrackApp {
     }
 
     // API Methods
-   async apiCall(endpoint, method = 'GET', data = null, isFormData = false) {
+ async apiCall(endpoint, method = 'GET', data = null, isFormData = false) {
     const url = `http://localhost:5000${endpoint}`;
     const user = JSON.parse(localStorage.getItem('meditrack_user'));
     const headers = { 'User-ID': user?.id || '' };
 
-    // Only add JSON header when not sending FormData
+    // Only add Content-Type for JSON
     if (!isFormData && method !== 'GET') {
         headers['Content-Type'] = 'application/json';
     }
 
-    const options = { 
-        method, 
-        headers,
-        mode: 'cors'
-    };
-
+    const options = { method, headers, mode: 'cors' };
     if (data && (method === 'POST' || method === 'PUT')) {
         options.body = isFormData ? data : JSON.stringify(data);
     }
 
-    const response = await fetch(url, options);
-    if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        throw new Error(`HTTP ${response.status} ${response.statusText} ${text}`);
-    }
+    try {
+        const response = await fetch(url, options);
+        const text = await response.text(); // read raw response
 
-    return await response.json();
+        let result;
+        try {
+            result = JSON.parse(text);
+        } catch {
+            // Non-JSON backend reply (happens sometimes with form uploads)
+            console.warn('⚠️ Non-JSON response received:', text);
+            result = { success: true, message: 'Request processed successfully (non-JSON)' };
+        }
+
+        // Treat any 2xx as success, not only 200
+        if (response.status >= 200 && response.status < 300) {
+            return result;
+        } else {
+            return {
+                success: false,
+                message: result?.message || `HTTP ${response.status} ${response.statusText}`
+            };
+        }
+    } catch (err) {
+        console.error('❌ API CALL ERROR:', err);
+        return { success: false, message: err.message || 'Network error' };
+    }
 }
 
 

@@ -87,6 +87,12 @@ body {
 .btn-secondary:hover {
     background: var(--gray-300);
 }
+table th:nth-child(4),
+table td:nth-child(4),
+table th:nth-child(5),
+table td:nth-child(5) {
+  text-align: center;
+}
 
 .btn-success {
     background: var(--success);

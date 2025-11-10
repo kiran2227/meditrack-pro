@@ -8,5 +8,6 @@ router.post('/', MedicineController.addMedicine);
 router.post('/:medicineId/taken', MedicineController.markAsTaken);
 router.post('/:medicineId/reschedule', MedicineController.rescheduleMedicine);
 router.delete('/:medicineId', MedicineController.deleteMedicine);
+router.put('/:medicineId', authMiddleware, MedicineController.updateMedicine);
 
 module.exports = router;

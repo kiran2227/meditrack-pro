@@ -603,14 +603,14 @@ app.post('/api/medicines', upload.fields([
 
         // ✅ share same voice for all reminders
         let voiceAlertId = null;
-        if (req.files?.voiceFile) {
-            const vf = req.files.voiceFile[0];
-            voiceAlertId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-            await db.execute(
-                'INSERT INTO voice_alerts (id,user_id,name,file_name,file_path) VALUES (?,?,?,?,?)',
-                [voiceAlertId, userId, alertName || `Voice for ${name}`, vf.filename, vf.path]
-            );
-        }
+      if (req.files && req.files.voiceFile && req.files.voiceFile.length > 0) {
+  const vf = req.files.voiceFile[0];
+  voiceAlertId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+  await db.execute(
+    'INSERT INTO voice_alerts (id,user_id,name,file_name,file_path) VALUES (?,?,?,?,?)',
+    [voiceAlertId, userId, alertName || `Voice for ${name}`, vf.filename, vf.path]
+  );
+}
 
         // ✅ create medicines
         const ids = [];
@@ -641,13 +641,16 @@ app.post('/api/medicines', upload.fields([
             medicineIds: ids
         });
 
-    } catch (error) {
-        console.error('Add medicine error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to add medicine'
-        });
-    }
+  } catch (error) {
+  console.error('❌ Add medicine error details:');
+  console.error('Message:', error.message);
+  console.error('Stack:', error.stack);
+  res.status(500).json({
+    success: false,
+    message: `Failed to add medicine: ${error.message}`
+  });
+}
+
 });
 
 // Get all medicines
@@ -1156,8 +1159,9 @@ app.get('/api/export/history', async (req, res) => {
                 if (!str) return '';
                 return `"${String(str).replace(/"/g, '""')}"`;
             };
-            
-            csvContent += `${escapeCSV(date)},${escapeCSV(record.medicine_name)},${escapeCSV(record.dosage)},${escapeCSV(record.scheduled_time)},${escapeCSV(actualTime)},${escapeCSV(record.status)},${escapeCSV(record.notes)}\n`;
+            csvContent += `${escapeCSV("'" + date)},${escapeCSV(record.medicine_name)},${escapeCSV(record.dosage)},${escapeCSV("'" + record.scheduled_time)},${escapeCSV("'" + actualTime)},${escapeCSV(record.status)},${escapeCSV(record.notes)}\n`;
+
+            //csvContent += `${escapeCSV(date)},${escapeCSV(record.medicine_name)},${escapeCSV(record.dosage)},${escapeCSV(record.scheduled_time)},${escapeCSV(actualTime)},${escapeCSV(record.status)},${escapeCSV(record.notes)}\n`;
         });
 
         res.setHeader('Content-Type', 'text/csv');
